@@ -1,0 +1,9 @@
+This directory will contain experimental code to learn how to use the rllib framework for building a reinforcement learning model on our energy/performance dataset.
+
+Install rllib, torch, and tensorflow:
+	pip3 install "ray[rllib]" torch tensorflow
+
+To use rllib command line:
+	rllib train --run=PPO --env=CartPole-v0 --config='{"train_batch_size": 4000}'
+
+
