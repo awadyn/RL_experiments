@@ -7,9 +7,9 @@ step_count = 0
 
 # problem definition:
 # 	a corridor in which an agent must move right to reach the exit
-# state space: 		corridor_length = 5, S = start position, G = goal position
-# action space: 	0 = move left, 1 = move right
-# reward space: 	-0.1 for every step, +1 for reaching goal position
+# state/observation space: 	corridor_length = 5, S = start position, G = goal position
+# action space: 		0 = move left, 1 = move right
+# reward space: 		-0.1 for every step, +1 for reaching goal position
 class SimpleCorridor(gym.Env):
 	def __init__(self, config):
 		# goal position = rightmost position
@@ -28,30 +28,43 @@ class SimpleCorridor(gym.Env):
 			print(Fore.BLACK + Back.RED + "observation_space = " + Style.RESET_ALL)
 			print(self.observation_space)
 
+
 	def reset(self):
+		# tracks how many steps until done = True and environment is reset
 		global step_count
+
+		# reset S to leftmost position		
+		self.cur_pos = 0
+
 		if debug:
 			print(Fore.BLACK + Back.RED + "resetting env... step_count = " + str(step_count) + Style.RESET_ALL)
-			#print("resetting env...")
-		self.cur_pos = 0
 		step_count = 0
+
 		return [self.cur_pos]
 
+
 	def step(self, action):
+		# tracks how many steps until done = True and environment is reset
 		global step_count
+
+		# go left if not in leftmost position
 		if (action == 0 and self.cur_pos > 0):
 			self.cur_pos -= 1
+		# go right 
 		elif action == 1:
 			self.cur_pos += 1
+		# done = True when cur_pos >= end_pos
 		done = self.cur_pos >= self.end_pos
+		# reward = 1 when reaching end_pos and -0.1 at every step otherwise
 		reward = 1.0 if done else -0.1
+
 		if not debug:
 			print(Fore.BLACK + Back.GREEN + "STEP: action =  " + str(action) + ", cur_pos = " + str(self.cur_pos) + ", reward = " + str(reward) + ", done = " + str(done) + Style.RESET_ALL)
-			#print(action)
-			#print(Fore.BLACK + Back.WHITE + "cur_pos, reward, done = "  + str(self.cur_pos) + str(reward) + str(done) + Style.RESET_ALL)
-			#print(self.cur_pos, reward, done)
 		step_count += 1
+
 		return [self.cur_pos], reward, done, {}
+
+
 
 # defining the training algorithm
 algo = PPO(
@@ -59,26 +72,34 @@ algo = PPO(
 		"env": SimpleCorridor,
 		"env_config": {
 			"corridor_length": 20,
-			"debug": True,
 		},
 		"num_workers": 1,
 	}
 )
 
+
+
+# training the above algorithm to go from S = 0 to G = 20
 for i in range(5):
 	results = algo.train()
-	print(f"Iter: {i}, avg_reward = {results['episode_reward_mean']}")
+	print(Fore.BLACK + Back.BLUE + f"Iter: {i}, avg_reward = {results['episode_reward_mean']}" + Style.RESET_ALL)
 
+
+
+# creating a new environment and state space
+# and using the above trained algorithm to solve the corridor traversal problem in it
 env = SimpleCorridor({"corridor_length": 10})
 obs = env.reset()
 done = False
 total_reward = 0.0
-
 while not done:
+	# given state = obs, compute action
 	action = algo.compute_single_action(obs)
+	# take a step given action
 	obs, reward, done, info = env.step(action)
+	# compute reward
 	total_reward += reward
 
-print(f"Played 1 episode, total rewared = {total_reward}")
+print(Fore.BLACK + Back.GREEN + f"Played 1 episode until done = True, total reward = {total_reward}")
 
 
