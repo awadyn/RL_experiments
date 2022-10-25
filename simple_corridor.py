@@ -1,5 +1,7 @@
 import gym
 from ray.rllib.algorithms.ppo import PPO
+
+# color print
 from colorama import Fore, Back, Style
 
 debug = True
@@ -20,6 +22,7 @@ class SimpleCorridor(gym.Env):
 		self.action_space = gym.spaces.Discrete(2)
 		# |state_space| = end_pos - 0
 		self.observation_space = gym.spaces.Box(0.0, self.end_pos, shape=(1,))
+
 		if debug:
 			print(Fore.BLACK + Back.RED + "end_pos =  "  + str(self.end_pos) + Style.RESET_ALL)
 			#print(self.end_pos)
@@ -29,6 +32,9 @@ class SimpleCorridor(gym.Env):
 			print(self.observation_space)
 
 
+	# run everytime 1 episode is completed
+	# each episode has many trials/steps until success
+	# returns new start state/observation, reward, and done status
 	def reset(self):
 		# tracks how many steps until done = True and environment is reset
 		global step_count
@@ -43,6 +49,8 @@ class SimpleCorridor(gym.Env):
 		return [self.cur_pos]
 
 
+	# run everytime 1 action is taken
+	# returns a new state/observation 
 	def step(self, action):
 		# tracks how many steps until done = True and environment is reset
 		global step_count
@@ -67,6 +75,7 @@ class SimpleCorridor(gym.Env):
 
 
 # defining the training algorithm
+# PPO is the mathematical model
 algo = PPO(
 	config = {
 		"env": SimpleCorridor,
@@ -81,6 +90,8 @@ algo = PPO(
 
 # training the above algorithm to go from S = 0 to G = 20
 for i in range(5):
+	# algo.train() runs multiple episodes per iteration until some criteria is satisfied
+	# e.g. criteria can be a bound on the runtime or the number of steps/actions taken
 	results = algo.train()
 	print(Fore.BLACK + Back.BLUE + f"Iter: {i}, avg_reward = {results['episode_reward_mean']}" + Style.RESET_ALL)
 
