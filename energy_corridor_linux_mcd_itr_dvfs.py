@@ -40,7 +40,7 @@ def prepare_action_dicts(df):
 
 # problem definition: 
 #	a corridor in which an agent must move right or left to find minimum energy
-#	moves imply changing only DVFS
+#	moves imply changing both ITR-delay and DVFS
 class EnergyCorridor(gym.Env):
 	def __init__(self, config):
 		df = config["df"]
@@ -74,21 +74,23 @@ class EnergyCorridor(gym.Env):
 		# default start key
 		self.cur_key = self.key_space[0]
 
-		# |action_space| = 3 (increase DVFS, decrease DVFS, or keep unchanged)
+		# |action_space| = [3 (increase DVFS, decrease DVFS, or keep unchanged),
+		#		    3 (increase ITR-delay, decrease ITR-delay, or keep unchanged)]
 		num_actions = [3, 3]
 		self.action_space = gym.spaces.MultiDiscrete(num_actions)
 
-		if not debug:
-			print(Fore.BLACK + Back.RED + "state_space =  "  + Style.RESET_ALL)
-			print(self.state_space)
-			print(Fore.BLACK + Back.RED + "reward_space = " + Style.RESET_ALL)
-			print(self.reward_space)
-			print(Fore.BLACK + Back.RED + "key_space" + Style.RESET_ALL)
+		if debug:
+			print(Fore.BLACK + Back.RED + "|state_space| =  " + str(len(self.state_space)) + Style.RESET_ALL)
+			#print(self.state_space)
+			print(Fore.BLACK + Back.RED + "|reward_space| = " + str(len(self.reward_space)) + Style.RESET_ALL)
+			#print(self.reward_space)
+			print(Fore.BLACK + Back.RED + "|key_space| = " + str(len(self.key_space)) + Style.RESET_ALL)
 			print(self.key_space)
-			print(Fore.BLACK + Back.RED + "action_space" + Style.RESET_ALL)
+			print(Fore.BLACK + Back.RED + "|action_space| = " + str(len(self.action_space)) + Style.RESET_ALL)
 			print(self.action_space)
-			print(Fore.BLACK + Back.RED + "observation_space" + Style.RESET_ALL)
-			print(self.observation_space)
+			#print(Fore.BLACK + Back.RED + "|observation_space| = " + str(len(self.observation_space)) + Style.RESET_ALL)
+			#print(self.observation_space)
+		if debug:
 			print(Fore.BLACK + Back.RED + "goal_key, min_joules_99" + Style.RESET_ALL)
 			print(self.goal_key, min_joules_99)
 
@@ -104,7 +106,8 @@ class EnergyCorridor(gym.Env):
 		step_count = 0
 
 		# a simple default reset 
-		self.cur_key = self.key_space[0]
+		idx = np.random.randint(len(self.key_space))
+		self.cur_key = self.key_space[idx]
 
 		return self.state_space[self.cur_key]
 
@@ -132,8 +135,9 @@ class EnergyCorridor(gym.Env):
 		if (self.reward_space[new_key]['joules_99'] < self.reward_space[self.cur_key]['joules_99']):
 			reward += 0.1
 		else:
-			reward -= 0.1
+			reward -= 0.5
 		if done:
+			print(Fore.BLACK + Back.RED + "FOUND MIN ENERGY" + Style.RESET_ALL)
 			reward += 1
 
 		if not debug:
@@ -173,7 +177,7 @@ algo = PPO(
 			"df": df,
 		},
 		"num_workers": 1,
-		"horizon": 20,
+		"horizon": 10,
 	}
 )
 
@@ -187,6 +191,7 @@ for i in range(50):
 env = EnergyCorridor({"df": df})
 obs = env.reset()
 done = False
+finish_count = 0
 total_reward = 0.0
 while not done:
 	# given state = obs, compute action
@@ -195,6 +200,10 @@ while not done:
 	obs, reward, done, info = env.step(action)
 	# compute reward
 	total_reward += reward
+	if (finish_count == 1000):
+		print(Fore.BLACK + Back.RED + "Terminated attempt.. done = False")
+		done = True
+	finish_count += 1
 
 print(Fore.BLACK + Back.GREEN + f"Played 1 episode until done = True, total reward = {total_reward}")
 
