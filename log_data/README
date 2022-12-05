@@ -1,0 +1,43 @@
+Experiment 0
+------------
+- An attempt to compress each feature vector.
+- An attempt to plot compressions on one graph.
+--> logs_group_0 are ebbrt featurized logs with const ITR = 100 and variable QPS and DVFS
+--> plot axes should be: x -> QPS, y -> DVFS, z -> featurization compression
+
+Experiment 1
+------------
+- Let the 99th percentile for joules measurement represent a compressed featurization.
+- Plot QPS vs DVFS vs 99th Joules
+--> this plot will reflect ebbrt's energy profile for a constant ITR value
+	--> i.e. it will reflect ebbrt's energy profile when exposed to this particular "timescale"
+
+Experiment 2
+------------
+- Try super-imposing plots, alternatively, varying only 1 of the axes
+--> ex: as qps increases, how does the relationship between joules and dvfs respond
+	--> i.e. at some qps, joules might decrease by some factor x as dvfs changes,
+		 and at different qps, this factor x might decrease
+	--> i.e. where is the relationship strongest?
+--> ex: as dvfs increases, how does the relationship between qps and joules respond
+	--> i.e. at some dvfs, joules might increase at a factor x as qps increases
+		 and at some other dvfs, this increase factor might decrease
+- All under 1 timescale defined by constant ITR
+- Then, across ITRs, where are the relationships strongest
+
+
+-----------------------------
+
+nohup <bash_cmd> <script.py> > log.txt &
+tail -f log.txt
+
+
+-----------------------------
+analysis of training:
+---------------------
+1. arrow plot (1 plot per experiment/test)
+2. learning curve (x-y: episode number - avg. reward)
+	--> (might need to normalize rewards)
+3. # of steps until optimal solution (given upper threshold N)
+
+
