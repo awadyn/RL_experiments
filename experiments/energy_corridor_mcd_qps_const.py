@@ -61,8 +61,8 @@ class EnergyCorridor(gym.Env):
 			print(self.action_space)
 
 		# a simple default reset 
-		#idx = np.random.randint(len(self.key_space))
-		idx = 0
+		idx = np.random.randint(len(self.key_space))
+		#idx = 0
 		self.cur_key = self.key_space[idx]
 		# initializing goal_key to be the key that yields minimum energy for this target_qps
 		#self.cur_qps = self.cur_key[2]
@@ -88,8 +88,8 @@ class EnergyCorridor(gym.Env):
 		step_count = 0
 
 		# a simple randomized reset 
-		#idx = np.random.randint(len(self.key_space))
-		idx = 4
+		idx = np.random.randint(len(self.key_space))
+		#idx = 4
 		self.cur_key = self.key_space[idx]
 		# initializing goal_key to be the key that yields minimum energy for this target_qps
 		#self.cur_qps = self.cur_key[2]

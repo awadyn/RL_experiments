@@ -39,9 +39,9 @@ def process_file(path, itr, dvfs, qps, run, core):
 	features = {}
 	if SYSTEM == 'linux':
 		#values = pd.read_csv(path, sep = ' ', index_col = 0, names = ['rx_desc', 'rx_bytes', 'tx_desc', 'tx_bytes', 'instructions', 'cycles', 'ref_cycles', 'llc_miss', 'c1', 'c1e', 'c3', 'c6', 'c7', 'joules', 'timestamp'])
-		values = pd.read_csv(path, sep = ' ', names = ['i', 'rx_desc', 'rx_bytes', 'tx_desc', 'tx_bytes', 'instructions', 'cycles', 'ref_cycles', 'llc_miss', 'c1', 'c1e', 'c3', 'c6', 'c7', 'joules', 'timestamp'])
+		values = pd.read_csv(path, sep = ' ', index_col = 0, names = ['i', 'rx_desc', 'rx_bytes', 'tx_desc', 'tx_bytes', 'instructions', 'cycles', 'ref_cycles', 'llc_miss', 'c1', 'c1e', 'c3', 'c6', 'c7', 'joules', 'timestamp'])
 	elif SYSTEM == 'ebbrt':
-		values = pd.read_csv(path, sep = ' ', names = ['i', 'rx_desc', 'rx_bytes', 'tx_desc', 'tx_bytes', 'instructions', 'cycles', 'ref_cycles', 'llc_miss', 'c3', 'c6', 'c7', 'joules', 'timestamp'])
+		values = pd.read_csv(path, sep = ' ', index_col = 0, names = ['i', 'rx_desc', 'rx_bytes', 'tx_desc', 'tx_bytes', 'instructions', 'cycles', 'ref_cycles', 'llc_miss', 'c3', 'c6', 'c7', 'joules', 'timestamp'])
 
 	if not debug:
 		print(values.head())

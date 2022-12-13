@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 # color print
 from colorama import Fore, Back, Style
+import warnings
 
 
 debug = True
@@ -166,31 +167,67 @@ def missing_rdtsc_out_files(loc, debug=False):
 
 
 def init_dataset(df):
-	reward_cols = ['joules_99', 'joules_per_interrupt', 'time_per_interrupt']
+	warnings.filterwarnings('ignore')
 
-	df_state = df.set_index(['i', 'itr', 'dvfs', 'qps']).drop(reward_cols, axis=1)
-	df_reward = df.set_index(['i', 'itr', 'dvfs', 'qps'])[reward_cols]
-	state_dict = df_state.T.to_dict()
-	for key in state_dict:
-		state_dict[key] = np.array(list(state_dict[key].values()))
-	reward_dict = df_reward.T.to_dict()
+	reward_cols = ['joules_99', 'joules_per_interrupt', 'time_per_interrupt']
+	# a featurized vector is identified by its run id (i.e. run#_core#) and qps id
+	id_cols = ['i']
+	# a featurized vector is marked by its itr and dvfs settings
+	knob_cols = ['itr', 'dvfs']
+	# NOTE: ignoring qps value for now since it is constant
+	skip_cols = ['qps']
+
+	#df_state = df.set_index(['i', 'itr', 'dvfs', 'qps']).drop(reward_cols, axis=1)
+	df_state = df.set_index(knob_cols).drop(reward_cols, axis=1).drop(skip_cols, axis=1)
+	#df_reward = df.set_index(['i', 'itr', 'dvfs', 'qps'])[reward_cols]
+	df_reward = df.set_index(knob_cols).drop(skip_cols, axis=1)[reward_cols]
+
+	print("df_state:")
+	print(df_state)
+
+	key_list = list(df_state.index)
+	key_set = set(key_list)
+	state_dict = {}
+	reward_dict = {}
+	for key in key_set:
+		states_per_key = df_state.loc[key].drop('i', axis=1)
+		rewards_per_key = df_reward.loc[key]
+		num_reps = len(states_per_key)
+		avg_state_per_key = np.add.reduce(states_per_key.values)/num_reps
+		avg_reward_per_key = np.add.reduce(rewards_per_key.values)/num_reps
+		state_dict[key] = np.array(list(avg_state_per_key))
+		reward_dict[key] = np.array(list(avg_reward_per_key))
+
+	#state_dict = df_state.T.to_dict()
+	#reward_dict = df_reward.T.to_dict()
+
+
+	# NOTE: need to do this transform for rllib to not complain
+	# NOTE: can probably skip this now
+	#for key in state_dict:
+	#	state_dict[key] = np.array(list(state_dict[key]))
+	#	reward_dict[key] = np.array(list(reward_dict[key]))
+
 	action_dict, knob_list = prepare_action_dicts(df)
-	key_list = list(state_dict.keys())
 
 	if debug:
 		print(Fore.BLACK + Back.GREEN + "state_dict: " + Style.RESET_ALL)
-		print(df_state)
+		print(len(state_dict.keys()))
+		#print(state_dict)
 		print(Fore.BLACK + Back.GREEN + "reward_dict: " + Style.RESET_ALL)
-		print(df_reward)
+		print(len(reward_dict.keys()))
+		#print(reward_dict)
 		print(Fore.BLACK + Back.GREEN + "action_dict: " + Style.RESET_ALL)
-		print(action_dict)
+		#print(action_dict)
 		print(Fore.BLACK + Back.GREEN + "knob_list: " + Style.RESET_ALL)
 		print(knob_list)
-		print(Fore.BLACK + Back.GREEN + "key_list: " + Style.RESET_ALL)
-		#print(key_list)
-		print(state_dict.keys())
+		print(Fore.BLACK + Back.GREEN + "key_set: " + Style.RESET_ALL)
+		print(key_set)
+		#print(len(key_set))		# len = 90
+		#print(len(key_list))		# len = 90
+		#print(state_dict.keys())
 
-	return state_dict, reward_dict, action_dict, knob_list, key_list
+	return state_dict, reward_dict, action_dict, knob_list, key_set
 
 
 # NOTE: features are average values across all cores of each experiment
@@ -260,6 +297,7 @@ def init_linux_mcd_dataset(df):
 
 
 def prepare_action_dicts(df):
+# NOTE: maybe skip dvfs's here..
 #def prepare_action_dicts(df, key_list):
 	def get_knob_dict(knob):
 	#def get_knob_dict(knob, knob_keys):
