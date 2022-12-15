@@ -208,7 +208,9 @@ def init_dataset(df):
 	#	state_dict[key] = np.array(list(state_dict[key]))
 	#	reward_dict[key] = np.array(list(reward_dict[key]))
 
-	action_dict, knob_list = prepare_action_dicts(df)
+	#action_dict, knob_list = prepare_action_dicts(df)
+	action_dict, knob_list = prepare_action_dicts(df, key_set)
+
 
 	if debug:
 		print(Fore.BLACK + Back.GREEN + "state_dict: " + Style.RESET_ALL)
@@ -296,43 +298,29 @@ def init_linux_mcd_dataset(df):
 	return state_dict, reward_dict, action_dict, knob_list, key_list
 
 
-def prepare_action_dicts(df):
+def prepare_action_dicts(df, key_set):
+#def prepare_action_dicts(df):
 # NOTE: maybe skip dvfs's here..
-#def prepare_action_dicts(df, key_list):
 	def get_knob_dict(knob):
-	#def get_knob_dict(knob, knob_keys):
 		l = np.sort(df[knob].unique())
 		l_p1 = np.roll(l, shift=-1)
 		l_p1[-1] = -1 #invalid choice
 		l_m1 = np.roll(l, shift=1)
 		l_m1[0] = -1 #invalid choice
 		d = {}
-		#new_key = []
 		for idx, elem in enumerate(l):
-			#new_key = [l_m1[idx], l_p1[idx]]
-			#new_key = tuple(new_key)
-			#if (new_key not in knob_keys):
-			#	print()
-			#	print("new key ", new_key, " not found... ")
-			#	print()
-			#	continue
-			#else:
-			#	d[elem] = {-1: l_m1[idx], 0: elem, 1: l_p1[idx]}
 			d[elem] = {-1: l_m1[idx], 0: elem, 1: l_p1[idx]}
 		return d
+
 	d = {}
 	knob_list = []
-	#knob_keys = []
-	#for key in key_list:
-	#	sub_key = key[0:2]
-	#	knob_keys.append(sub_key)
-	#print()
-	#print()
-	#print("knob_keys: ", knob_keys)
 	for knob in ['itr', 'dvfs']:
 		knob_list.append(knob)
 		d[knob] = get_knob_dict(knob)	
-		#d[knob] = get_knob_dict(knob, knob_keys)	
+
+	print(Fore.BLACK + Back.RED + "d[itr]:  " + str(d['itr']) + Style.RESET_ALL)
+	print(Fore.BLACK + Back.RED + "d[dvfs]:  " + str(d['dvfs']) + Style.RESET_ALL)
+
 	return d, knob_list
 
 

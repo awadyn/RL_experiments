@@ -1,5 +1,5 @@
 # EXPERIMENT 0
-# dataset: linux mcd logs + 1 qps value = 40000, varying itr-delay and dvfs values
+# dataset: linux mcd logs + 1 qps value, varying itr-delay and dvfs values
 import gym
 from ray.rllib.algorithms.ppo import PPO
 
@@ -31,10 +31,13 @@ class EnergyCorridor(gym.Env):
 		self.state_space = {}
 		self.reward_space = {}
 		self.key_space = []
+		self.sorted_keys = []
 		for key in key_set:
+			#numeric_key = tuple([int(list(key)[0]), int(list(key)[1], base=16)])
 			self.state_space[key] = state_dict[key]
 			self.reward_space[key] = reward_dict[key]
 			self.key_space.append(key)
+		self.sorted_keys = sorted(self.key_space)
 
 		# N = |observation_space| = |feature_space| = |single_state_vector|
 		N = len(state_dict[self.key_space[0]])
@@ -62,19 +65,18 @@ class EnergyCorridor(gym.Env):
 
 		# a simple default reset 
 		idx = np.random.randint(len(self.key_space))
-		#idx = 0
 		self.cur_key = self.key_space[idx]
+
 		# initializing goal_key to be the key that yields minimum energy for this target_qps
-		#self.cur_qps = self.cur_key[2]
-		#joules = list({k:v['joules_99'] for k,v in self.reward_space.items()}.values())
 		joules = list({k:v[0] for k,v in self.reward_space.items()}.values())
 		# goal key = key that yields min energy
 		min_joules = min(joules)
-		min_index = joules.index(min_joules)
-		self.goal_key = self.key_space[min_index]
+		self.goal_energy = min_joules
+		#min_index = joules.index(min_joules)
+		#self.goal_key = self.key_space[min_index]
 		if debug:
-			print(Fore.BLACK + Back.RED + "goal_key, min_joules" + Style.RESET_ALL)
-			print(self.goal_key, min_joules)
+			print(Fore.BLACK + Back.RED + "goal_energy = " + Style.RESET_ALL)
+			print(self.goal_energy)
 		return
 
 
@@ -89,16 +91,8 @@ class EnergyCorridor(gym.Env):
 
 		# a simple randomized reset 
 		idx = np.random.randint(len(self.key_space))
-		#idx = 4
 		self.cur_key = self.key_space[idx]
-		# initializing goal_key to be the key that yields minimum energy for this target_qps
-		#self.cur_qps = self.cur_key[2]
-		#joules = list({k:v['joules'] for k,v in self.reward_space.items() if k[2] == self.cur_qps}.values())
-		#keys = list({k for k in self.key_space if k[2] == self.cur_qps})
-		# goal key = key that yields min energy
-		#min_joules = min(joules)
-		#min_index = joules.index(min_joules)
-		#self.goal_key = keys[min_index]
+
 		# returning new state vector
 		return self.state_space[self.cur_key]
 
@@ -117,33 +111,112 @@ class EnergyCorridor(gym.Env):
 			new_dvfs = self.cur_key[1]
 		new_key[0] = new_itr
 		new_key[1] = new_dvfs
-		self.key_space
 		new_key = tuple(new_key)
-		# check if new key exists
-		#if (new_key not in self.key_space):
-		#	print("KEY NOT FOUND: ", new_key)
-		#	return self.state_space[self.cur_key], 0, False, {'error': 1} 
-		#new_energy = self.reward_space[new_key]['joules_99']
-		new_energy = self.reward_space[new_key][0]
-		done = (new_key == self.goal_key)
-		#reward = 1.0 if done else -0.5 if bad move, +0.1 if good move
+
 		reward = 0
-		#if (self.reward_space[new_key]['joules_99'] < self.reward_space[self.cur_key]['joules_99']):
-		if (self.reward_space[new_key][0] < self.reward_space[self.cur_key][0]):
-			reward += 0.1
-		else:
-			reward -= 0.5
-		if done:
-			print(Fore.BLACK + Back.RED + "FOUND MIN ENERGY" + Style.RESET_ALL)
-			reward += 1
-
-		if debug:
-			print(Fore.BLACK + Back.GREEN + "STEP: action =  " + str(action - 1) + ", reward = " + str(reward) + ", done = " + str(done) + Style.RESET_ALL)
-			print(Fore.BLACK + Back.GREEN + "new key: " + Style.RESET_ALL)
-			print(new_key)
-			print(Fore.BLACK + Back.GREEN + "new energy: " + Style.RESET_ALL)
-			print(new_energy)
-
+		while True:
+			try:
+				new_energy = self.reward_space[new_key][0]
+				diff_energy = np.abs(self.reward_space[self.cur_key][0] - self.reward_space[new_key][0])
+				done = (new_energy == self.goal_energy)
+				#reward = 1.0 if done else -0.5 if bad move, +0.1 if good move
+				if (new_energy < self.reward_space[self.cur_key][0]):
+					reward += 0.5
+					#reward += 5 * diff_energy
+				else:
+					reward -= 0.1
+					#reward -= diff_energy
+				if done:
+					print(Fore.BLACK + Back.RED + "FOUND MIN ENERGY" + Style.RESET_ALL)
+					reward += 1
+				if debug:
+					print(Fore.BLACK + Back.GREEN + "STEP: action =  " + str(action - 1) + ", reward = " + str(reward) + ", done = " + str(done) + Style.RESET_ALL)
+					print(Fore.BLACK + Back.GREEN + "new key: " + Style.RESET_ALL)
+					print(new_key)
+					print(Fore.BLACK + Back.GREEN + "new energy: " + Style.RESET_ALL)
+					print(new_energy)
+				break
+			except KeyError:
+				print(Fore.BLACK + Back.YELLOW + "Stepping toward " + str(new_key) + "... This key is not found... try interpolation to fillin missing log data." + Style.RESET_ALL)
+				target_states = []
+				target_rewards = []
+				if (action[0] - 1 == 0):
+					print("only dvfs changed...")
+					# find keys with target dvfs value
+					target_keys = [key for key in self.sorted_keys if key[1] == new_key[1]]
+					print("target_keys: ", target_keys)
+					# new state will be the mean of target key states
+					for key in target_keys:
+						target_states.append(self.state_space[key])
+						target_rewards.append(self.reward_space[key])
+					target_states.append(self.state_space[self.cur_key])
+					target_rewards.append(self.reward_space[self.cur_key])
+					print(target_states)
+					print(target_rewards)
+					new_state = np.mean(target_states, axis=0)
+					new_reward = np.mean(target_rewards, axis=0)
+					print("new_state = ", new_state)
+					print("new_reward = ", new_reward)
+					# add interpolated state and reward to environment
+					self.state_space[new_key] = new_state
+					self.reward_space[new_key] = new_reward
+					print()
+					print(self.state_space[new_key], self.reward_space[new_key])
+					print()
+				elif (action[1] - 1 == 0):
+					print("only itr-delay changed...")
+					# find keys with target itr-delay value
+					target_keys = [key for key in self.sorted_keys if key[0] == new_key[0]]
+					# interpolate by averaging current key state and target key state
+					print("target_keys: ", target_keys)
+					# new state will be the mean of target key states
+					for key in target_keys:
+						target_states.append(self.state_space[key])
+						target_rewards.append(self.reward_space[key])
+					target_states.append(self.state_space[self.cur_key])
+					target_rewards.append(self.reward_space[self.cur_key])
+					print(target_states)
+					print(target_rewards)
+					new_state = np.mean(target_states, axis=0)
+					new_reward = np.mean(target_rewards, axis=0)
+					print("new_state = ", new_state)
+					print("new_reward = ", new_reward)
+					# add interpolated state to state_space
+					self.state_space[new_key] = new_state
+					self.reward_space[new_key] = new_reward
+					print()
+					print(self.state_space[new_key], self.reward_space[new_key])
+					print()
+				else:
+					print("both itr-delay and dvfs changed...")
+					# find keys with target itr-delay value
+					target_keys = [key for key in self.sorted_keys if key[0] == new_key[0]]
+					# find keys with target dvfs value and current itr-delay value
+					for key in self.sorted_keys:
+						if (key[1] == new_key[1] and key[0] == self.cur_key[0]):
+							target_keys.append(key)
+					print("target_keys: ", target_keys)
+					# new state will be the mean of target key states
+					for key in target_keys:
+						target_states.append(self.state_space[key])
+						target_rewards.append(self.reward_space[key])
+					target_states.append(self.state_space[self.cur_key])
+					target_rewards.append(self.reward_space[self.cur_key])
+					print(target_states)
+					print(target_rewards)
+					new_state = np.mean(target_states, axis=0)
+					new_reward = np.mean(target_rewards, axis=0)
+					print("new_state = ", new_state)
+					print("new_reward = ", new_reward)
+					# add interpolated state to state_space
+					self.state_space[new_key] = new_state
+					self.reward_space[new_key] = new_reward
+					print()
+					print(self.state_space[new_key], self.reward_space[new_key])
+					print()
+					
+				continue		
+	
 		step_count += 1
 		new_state = self.state_space[new_key]
 		return new_state, reward, done, {'error': 0}
@@ -151,10 +224,6 @@ class EnergyCorridor(gym.Env):
 
 featurized_logs_file = sys.argv[1]
 df = pd.read_csv(featurized_logs_file, index_col=0, sep = ' ')
-# choosing only logs with rapl value 135
-#df = df[df['rapl'] == 135]
-# choosing only logs with target_qps value 40000
-#df = df[df['target_qps'] == 40000]
 ## normalizing all feature vectors
 df = utils.normalize(df)
 
@@ -181,11 +250,11 @@ algo = PPO(
 		},
 		"framework": 'torch',
 		"num_workers": 1,
-		"horizon": 15,
+		"horizon": 20,
 	}
 )
 
-for i in range(50):
+for i in range(200):
 	results = algo.train()
 	print(Fore.BLACK + Back.BLUE + f"Iter: {i}, avg_reward = {results['episode_reward_mean']}" + Style.RESET_ALL)
 
