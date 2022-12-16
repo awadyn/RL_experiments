@@ -125,7 +125,7 @@ class EnergyCorridor(gym.Env):
 					reward -= diff_energy
 				if done:
 					#print(Fore.BLACK + Back.RED + "FOUND MIN ENERGY" + Style.RESET_ALL)
-					reward += 1
+					reward += 10 * diff_energy
 				if not debug:
 					print(Fore.BLACK + Back.GREEN + "STEP: action =  " + str(action - 1) + ", reward = " + str(reward) + ", done = " + str(done) + Style.RESET_ALL)
 					print(Fore.BLACK + Back.GREEN + "new key: " + Style.RESET_ALL)
@@ -134,39 +134,43 @@ class EnergyCorridor(gym.Env):
 					print(new_energy)
 				break
 			except KeyError:
-				print(Fore.BLACK + Back.YELLOW + "Stepping toward " + str(new_key) + "... This key is not found... try interpolation to fillin missing log data." + Style.RESET_ALL)
+				print(Fore.BLACK + Back.YELLOW + "Stepping toward " + str(new_key) + "... This key is not found... try interpolation to fill-in missing log data." + Style.RESET_ALL)
+				# find euclidean distance between all present keys and missing key
+				# find closest 2 keys to missing key
+				# find mean of state and reward vectors indexed by these closest keys
+				# 1. create dictionary of key:dist values
+				distances = {}
+				for key in self.key_space:
+					k = np.array((int(key[0]), int(key[1],16)))
+					nk = np.array((int(new_key[0]), int(new_key[1],16)))
+					distances[key] = np.linalg.norm(k - nk)
+				# 2. sort dictionary by values
+				sorted_distances = sorted(distances.items(), key=lambda x:x[1])
+				# 3. use closest 2 keys as inputs to interpolation
+				target_keys = [sorted_distances[0][0], sorted_distances[1][0]]
+				
+				if not debug:
+					if (action[0] - 1 == 0):
+						print("only dvfs changed...")
+					elif (action[1] - 1 == 0):
+						print("only itr-delay changed...")
+					else:
+						print("both itr-delay and dvfs changed...")
+					print("target_keys: ", target_keys)
+
 				target_states = []
 				target_rewards = []
-				if (action[0] - 1 == 0):
-					print("only dvfs changed...")
-					# find keys with target dvfs value
-					target_keys = [key for key in self.sorted_keys if key[1] == new_key[1]]
-				elif (action[1] - 1 == 0):
-					print("only itr-delay changed...")
-					# find keys with target itr-delay value
-					target_keys = [key for key in self.sorted_keys if key[0] == new_key[0]]
-				else:
-					print("both itr-delay and dvfs changed...")
-					# find keys with target itr-delay value
-					target_keys = [key for key in self.sorted_keys if key[0] == new_key[0]]
-					# find keys with target dvfs value and current itr-delay value
-					for key in self.sorted_keys:
-						if (key[1] == new_key[1] and key[0] == self.cur_key[0]):
-							target_keys.append(key)
-
-				print("target_keys: ", target_keys)
 				for key in target_keys:
 					target_states.append(self.state_space[key])
 					target_rewards.append(self.reward_space[key])
 				target_states.append(self.state_space[self.cur_key])
 				target_rewards.append(self.reward_space[self.cur_key])
-				print(target_states)
-				print(target_rewards)
 				# new state and reward will be the mean of target key states
 				new_state = np.mean(target_states, axis=0)
 				new_reward = np.mean(target_rewards, axis=0)
-				print("new_state = ", new_state)
-				print("new_reward = ", new_reward)
+				if not debug:
+					print("new_state = ", new_state)
+					print("new_reward = ", new_reward)
 				# add interpolated state and reward to environment
 				self.state_space[new_key] = new_state
 				self.reward_space[new_key] = new_reward
