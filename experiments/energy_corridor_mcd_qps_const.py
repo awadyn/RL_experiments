@@ -119,17 +119,14 @@ class EnergyCorridor(gym.Env):
 				new_energy = self.reward_space[new_key][0]
 				diff_energy = np.abs(self.reward_space[self.cur_key][0] - self.reward_space[new_key][0])
 				done = (new_energy == self.goal_energy)
-				#reward = 1.0 if done else -0.5 if bad move, +0.1 if good move
 				if (new_energy < self.reward_space[self.cur_key][0]):
-					reward += 0.5
-					#reward += 5 * diff_energy
+					reward += diff_energy
 				else:
-					reward -= 0.1
-					#reward -= diff_energy
+					reward -= diff_energy
 				if done:
-					print(Fore.BLACK + Back.RED + "FOUND MIN ENERGY" + Style.RESET_ALL)
+					#print(Fore.BLACK + Back.RED + "FOUND MIN ENERGY" + Style.RESET_ALL)
 					reward += 1
-				if debug:
+				if not debug:
 					print(Fore.BLACK + Back.GREEN + "STEP: action =  " + str(action - 1) + ", reward = " + str(reward) + ", done = " + str(done) + Style.RESET_ALL)
 					print(Fore.BLACK + Back.GREEN + "new key: " + Style.RESET_ALL)
 					print(new_key)
@@ -144,49 +141,10 @@ class EnergyCorridor(gym.Env):
 					print("only dvfs changed...")
 					# find keys with target dvfs value
 					target_keys = [key for key in self.sorted_keys if key[1] == new_key[1]]
-					print("target_keys: ", target_keys)
-					# new state will be the mean of target key states
-					for key in target_keys:
-						target_states.append(self.state_space[key])
-						target_rewards.append(self.reward_space[key])
-					target_states.append(self.state_space[self.cur_key])
-					target_rewards.append(self.reward_space[self.cur_key])
-					print(target_states)
-					print(target_rewards)
-					new_state = np.mean(target_states, axis=0)
-					new_reward = np.mean(target_rewards, axis=0)
-					print("new_state = ", new_state)
-					print("new_reward = ", new_reward)
-					# add interpolated state and reward to environment
-					self.state_space[new_key] = new_state
-					self.reward_space[new_key] = new_reward
-					print()
-					print(self.state_space[new_key], self.reward_space[new_key])
-					print()
 				elif (action[1] - 1 == 0):
 					print("only itr-delay changed...")
 					# find keys with target itr-delay value
 					target_keys = [key for key in self.sorted_keys if key[0] == new_key[0]]
-					# interpolate by averaging current key state and target key state
-					print("target_keys: ", target_keys)
-					# new state will be the mean of target key states
-					for key in target_keys:
-						target_states.append(self.state_space[key])
-						target_rewards.append(self.reward_space[key])
-					target_states.append(self.state_space[self.cur_key])
-					target_rewards.append(self.reward_space[self.cur_key])
-					print(target_states)
-					print(target_rewards)
-					new_state = np.mean(target_states, axis=0)
-					new_reward = np.mean(target_rewards, axis=0)
-					print("new_state = ", new_state)
-					print("new_reward = ", new_reward)
-					# add interpolated state to state_space
-					self.state_space[new_key] = new_state
-					self.reward_space[new_key] = new_reward
-					print()
-					print(self.state_space[new_key], self.reward_space[new_key])
-					print()
 				else:
 					print("both itr-delay and dvfs changed...")
 					# find keys with target itr-delay value
@@ -195,26 +153,23 @@ class EnergyCorridor(gym.Env):
 					for key in self.sorted_keys:
 						if (key[1] == new_key[1] and key[0] == self.cur_key[0]):
 							target_keys.append(key)
-					print("target_keys: ", target_keys)
-					# new state will be the mean of target key states
-					for key in target_keys:
-						target_states.append(self.state_space[key])
-						target_rewards.append(self.reward_space[key])
-					target_states.append(self.state_space[self.cur_key])
-					target_rewards.append(self.reward_space[self.cur_key])
-					print(target_states)
-					print(target_rewards)
-					new_state = np.mean(target_states, axis=0)
-					new_reward = np.mean(target_rewards, axis=0)
-					print("new_state = ", new_state)
-					print("new_reward = ", new_reward)
-					# add interpolated state to state_space
-					self.state_space[new_key] = new_state
-					self.reward_space[new_key] = new_reward
-					print()
-					print(self.state_space[new_key], self.reward_space[new_key])
-					print()
-					
+
+				print("target_keys: ", target_keys)
+				for key in target_keys:
+					target_states.append(self.state_space[key])
+					target_rewards.append(self.reward_space[key])
+				target_states.append(self.state_space[self.cur_key])
+				target_rewards.append(self.reward_space[self.cur_key])
+				print(target_states)
+				print(target_rewards)
+				# new state and reward will be the mean of target key states
+				new_state = np.mean(target_states, axis=0)
+				new_reward = np.mean(target_rewards, axis=0)
+				print("new_state = ", new_state)
+				print("new_reward = ", new_reward)
+				# add interpolated state and reward to environment
+				self.state_space[new_key] = new_state
+				self.reward_space[new_key] = new_reward
 				continue		
 	
 		step_count += 1
