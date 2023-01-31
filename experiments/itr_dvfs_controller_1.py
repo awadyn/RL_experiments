@@ -1,4 +1,4 @@
-# EXPERIMENT 0
+# CONTROLLER V1
 # dataset: linux mcd logs + 1 qps value, varying itr-delay and dvfs values
 import gym
 from ray.rllib.algorithms.ppo import PPO
@@ -88,8 +88,6 @@ class EnergyCorridor(gym.Env):
 		if debug:
 			print(Fore.BLACK + Back.RED + "goal_energy = " + Style.RESET_ALL)
 			print(self.goal_energy)
-			print(Fore.BLACK + Back.RED + "goal_key = " + Style.RESET_ALL)
-			print(self.goal_key)
 		self.episode_reward = 0
 		return
 
@@ -130,7 +128,6 @@ class EnergyCorridor(gym.Env):
 		if new_dvfs == -1:
 			new_dvfs = self.cur_key[1]
 		if self.testing:
-			print("cur_itr: ", self.cur_key[0], " next_itr: ", new_itr)
 			self.itrs_visited.append(new_itr)
 			self.dvfss_visited.append(new_dvfs)
 
@@ -139,79 +136,78 @@ class EnergyCorridor(gym.Env):
 		new_key = tuple(new_key)
 
 		reward = 0
-		#while (True):
-		#while (reward == 0):
-		#try:
-		new_energy = self.reward_space[new_key][0]
-		diff_energy = 100*self.reward_space[self.cur_key][0] - 100*self.reward_space[new_key][0]
-		done = (new_energy == self.goal_energy)
-		if (diff_energy > 0):
-			#reward = 10*diff_energy
-			reward += 10
-		else:
-			#reward = -50*diff_energy
-			reward -= 10
-		#elif (diff_energy == 0):
-			#reward = -20*diff_energy
-		#	reward -= 5
-		if done:
-			self.success_count += 1
-			#print(Fore.BLACK + Back.RED + "HIT MIN.. steps = " + str(step_count) + "    reset_count = " + str(self.reset_count) + "    success_count = " + str(self.success_count) + Style.RESET_ALL)
-			#reward += 100 * diff_energy
-			#reward += 20
-		#if ((not done) and (step_count >= 12)):
-		#	reward -= 50
+		while True:
+			try:
+				new_energy = self.reward_space[new_key][0]
+				diff_energy = 100*self.reward_space[self.cur_key][0] - 100*self.reward_space[new_key][0]
+				done = (new_energy == self.goal_energy)
+				if (diff_energy > 0):
+					#reward = 10*diff_energy
+					reward += 10
+				else:
+					#reward = -50*diff_energy
+					reward -= 10
+				#elif (diff_energy == 0):
+					#reward = -20*diff_energy
+				#	reward -= 5
+				if done:
+					self.success_count += 1
+					print(Fore.BLACK + Back.RED + "HIT MIN.. steps = " + str(step_count) + "    reset_count = " + str(self.reset_count) + "    success_count = " + str(self.success_count) + Style.RESET_ALL)
+					#reward += 100 * diff_energy
+					#reward += 20
+				#if ((not done) and (step_count >= 12)):
+				#	reward -= 50
 
-		if not debug:
-			print(Fore.BLACK + Back.GREEN + "STEP: action =  " + str(action - 1) + ", reward = " + str(reward) + ", done = " + str(done) + Style.RESET_ALL)
-			print(Fore.BLACK + Back.GREEN + "new key: " + Style.RESET_ALL)
-			print(new_key)
-			print(Fore.BLACK + Back.GREEN + "new energy: " + Style.RESET_ALL)
-			print(new_energy)
-		#	break
-		#except KeyError:
-		#	print(Fore.BLACK + Back.YELLOW + "Stepping toward " + str(new_key) + "... This key is not found... try interpolation to fill-in missing log data." + Style.RESET_ALL)
-		#	# find euclidean distance between all present keys and missing key
-		#	# find closest 2 keys to missing key
-		#	# find mean of state and reward vectors indexed by these closest keys
-		#	# 1. create dictionary of key:dist values
-		#	distances = {}
-		#	for key in self.key_space:
-		#		k = np.array((int(key[0]), int(key[1],16)))
-		#		nk = np.array((int(new_key[0]), int(new_key[1],16)))
-		#		distances[key] = np.linalg.norm(k - nk)
-		#	# 2. sort dictionary by values
-		#	sorted_distances = sorted(distances.items(), key=lambda x:x[1])
-		#	# 3. use closest 2 keys as inputs to interpolation
-		#	target_keys = [sorted_distances[0][0], sorted_distances[1][0]]
-		#	
-		#	if not debug:
-		#		if (action[0] - 1 == 0):
-		#			print("only dvfs changed...")
-		#		elif (action[1] - 1 == 0):
-		#			print("only itr-delay changed...")
-		#		else:
-		#			print("both itr-delay and dvfs changed...")
-		#		print("target_keys: ", target_keys)
+				if not debug:
+					print(Fore.BLACK + Back.GREEN + "STEP: action =  " + str(action - 1) + ", reward = " + str(reward) + ", done = " + str(done) + Style.RESET_ALL)
+					print(Fore.BLACK + Back.GREEN + "new key: " + Style.RESET_ALL)
+					print(new_key)
+					print(Fore.BLACK + Back.GREEN + "new energy: " + Style.RESET_ALL)
+					print(new_energy)
+				break
+			except KeyError:
+				print(Fore.BLACK + Back.YELLOW + "Stepping toward " + str(new_key) + "... This key is not found... try interpolation to fill-in missing log data." + Style.RESET_ALL)
+				# find euclidean distance between all present keys and missing key
+				# find closest 2 keys to missing key
+				# find mean of state and reward vectors indexed by these closest keys
+				# 1. create dictionary of key:dist values
+				distances = {}
+				for key in self.key_space:
+					k = np.array((int(key[0]), int(key[1],16)))
+					nk = np.array((int(new_key[0]), int(new_key[1],16)))
+					distances[key] = np.linalg.norm(k - nk)
+				# 2. sort dictionary by values
+				sorted_distances = sorted(distances.items(), key=lambda x:x[1])
+				# 3. use closest 2 keys as inputs to interpolation
+				target_keys = [sorted_distances[0][0], sorted_distances[1][0]]
+				
+				if not debug:
+					if (action[0] - 1 == 0):
+						print("only dvfs changed...")
+					elif (action[1] - 1 == 0):
+						print("only itr-delay changed...")
+					else:
+						print("both itr-delay and dvfs changed...")
+					print("target_keys: ", target_keys)
 
-		#	target_states = []
-		#	target_rewards = []
-		#	for key in target_keys:
-		#		target_states.append(self.state_space[key])
-		#		target_rewards.append(self.reward_space[key])
-		#	target_states.append(self.state_space[self.cur_key])
-		#	target_rewards.append(self.reward_space[self.cur_key])
-		#	# new state and reward will be the mean of target key states
-		#	new_state = np.mean(target_states, axis=0)
-		#	new_reward = np.mean(target_rewards, axis=0)
-		#	if not debug:
-		#		print("new_state = ", new_state)
-		#		print("new_reward = ", new_reward)
-		#	# add interpolated state and reward to environment
-		#	self.state_space[new_key] = new_state
-		#	self.reward_space[new_key] = new_reward
-		#	#continue		
-	
+				target_states = []
+				target_rewards = []
+				for key in target_keys:
+					target_states.append(self.state_space[key])
+					target_rewards.append(self.reward_space[key])
+				target_states.append(self.state_space[self.cur_key])
+				target_rewards.append(self.reward_space[self.cur_key])
+				# new state and reward will be the mean of target key states
+				new_state = np.mean(target_states, axis=0)
+				new_reward = np.mean(target_rewards, axis=0)
+				if not debug:
+					print("new_state = ", new_state)
+					print("new_reward = ", new_reward)
+				# add interpolated state and reward to environment
+				self.state_space[new_key] = new_state
+				self.reward_space[new_key] = new_reward
+				continue		
+		
 		step_count += 1
 		new_state = self.state_space[new_key]
 		self.episode_reward += reward
@@ -219,10 +215,9 @@ class EnergyCorridor(gym.Env):
 
 
 featurized_logs_file = sys.argv[1]
-#df = pd.read_csv(featurized_logs_file, index_col=0, sep = ' ')
 
-#df = pd.read_csv(featurized_logs_file, sep = ' ')
-df = pd.read_csv(featurized_logs_file, sep = ',')
+df = pd.read_csv(featurized_logs_file, sep = ' ')
+#df = pd.read_csv(featurized_logs_file, sep = ',')
 
 ## normalizing all feature vectors
 #df = utils.normalize(df)
@@ -252,64 +247,64 @@ algo = PPO(
 		"num_workers": 1,
 		"horizon": 11,
 		"gamma": 0.8,
-		"lr": 1e-4,
+		#"lr": 1e-3,
 	}
 )
 
 
-for i in range(1):
+for i in range(20):
 	results = algo.train()
 	print(Fore.BLACK + Back.BLUE + f"Iter: {i}, avg_reward = {results['episode_reward_mean']}" + Style.RESET_ALL)
 
-# creating a new environment and state space
-# and using the above trained algorithm to solve the corridor traversal problem in it
-env = EnergyCorridor({"df": df})
-env.testing = True
-all_itrs_visited = []
-all_dvfss_visited = []
-for i in range(5):
-	print(Style.RESET_ALL)
-	obs = env.reset()
-	done = False
-	finish_count = 0
-	total_reward = 0.0
-
-	fig = go.Figure()
-	fig.add_trace(go.Scatter(x=env.itrs, y=env.dvfss, mode='markers'))
-	env.itrs_visited = []
-	env.dvfss_visited = []
-	
-	while not done:
-		# given state = obs, compute action
-		action = algo.compute_single_action(obs)
-		# take a step given action
-		obs, reward, done, info = env.step(action)
-		print("new_key: ", info['key'], "new_energy: " , env.reward_space[info['key']][0]  , "reward: ", reward,  "done: ", done)
-		# NOTE: in case a bad action is chosen, just repeat and choose another
-		#if (info['error'] == 1):
-		#	continue
-		# compute reward
-		total_reward += reward
-		if (finish_count == 20):
-			print(Fore.BLACK + Back.RED + "Terminated attempt.. done = False")
-			break
-		finish_count += 1
-	
-	print(Fore.BLACK + Back.GREEN + f"Played 1 episode, total reward = {total_reward}")
-	
-	
-	print('--------------------------------------------')
-	print("itrs_visited: ", env.itrs_visited, "   dvfss_visited: ", env.dvfss_visited)
-	print('--------------------------------------------')
-
-	all_itrs_visited.append(env.itrs_visited)
-	all_dvfss_visited.append(env.dvfss_visited)
-
-#fig.add_trace(go.Scatter(x=[list(env.goal_key)[0]], y=[list(env.goal_key)[1]], marker_size=20, marker_color = "yellow"))	
-for i in range(5):
-	fig.add_trace(go.Scatter(x=all_itrs_visited[i], y=all_dvfss_visited[i], marker= dict(size=10,symbol= "arrow-bar-up", angleref="previous")))
-
-fig.show()
+## creating a new environment and state space
+## and using the above trained algorithm to solve the corridor traversal problem in it
+#env = EnergyCorridor({"df": df})
+#env.testing = True
+#all_itrs_visited = []
+#all_dvfss_visited = []
+#for i in range(5):
+#	print(Style.RESET_ALL)
+#	obs = env.reset()
+#	done = False
+#	finish_count = 0
+#	total_reward = 0.0
+#
+#	fig = go.Figure()
+#	fig.add_trace(go.Scatter(x=env.itrs, y=env.dvfss, mode='markers'))
+#	env.itrs_visited = []
+#	env.dvfss_visited = []
+#	
+#	while not done:
+#		# given state = obs, compute action
+#		action = algo.compute_single_action(obs)
+#		# take a step given action
+#		obs, reward, done, info = env.step(action)
+#		print("new_key: ", info['key'], "new_energy: " , env.reward_space[info['key']][0]  , "reward: ", reward,  "done: ", done)
+#		# NOTE: in case a bad action is chosen, just repeat and choose another
+#		#if (info['error'] == 1):
+#		#	continue
+#		# compute reward
+#		total_reward += reward
+#		if (finish_count == 20):
+#			print(Fore.BLACK + Back.RED + "Terminated attempt.. done = False")
+#			break
+#		finish_count += 1
+#	
+#	print(Fore.BLACK + Back.GREEN + f"Played 1 episode, total reward = {total_reward}")
+#	
+#	
+#	print('--------------------------------------------')
+#	print("itrs_visited: ", env.itrs_visited, "   dvfss_visited: ", env.dvfss_visited)
+#	print('--------------------------------------------')
+#
+#	all_itrs_visited.append(env.itrs_visited)
+#	all_dvfss_visited.append(env.dvfss_visited)
+#
+##fig.add_trace(go.Scatter(x=[list(env.goal_key)[0]], y=[list(env.goal_key)[1]], marker_size=20, marker_color = "yellow"))	
+#for i in range(5):
+#	fig.add_trace(go.Scatter(x=all_itrs_visited[i], y=all_dvfss_visited[i], marker= dict(size=10,symbol= "arrow-bar-up", angleref="previous")))
+#
+#fig.show()
 
 
 

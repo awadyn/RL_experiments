@@ -192,6 +192,39 @@ def init_dataset(df):
 	return state_dict, reward_dict, action_dict, knob_list, key_list
 
 
+# NOTE: features are average values across all cores of each experiment
+# dataset features:
+# i sys itr dvfs rapl read_5th read_10th read_50th read_90th read_95th read_99th measure_qps target_qps time joules rx_desc rx_bytes tx_desc tx_bytes instructions cycles ref_cycles llc_miss c1 c1e c3 c6 c7 num_interrupts
+def init_compact_dataset(df):
+	reward_cols = ['joules', 'time']
+	skip_cols = ['i', 'sys', 'rapl', 'measure_qps']
+	# state features: read_5th read_10th read_50th read_90th read_95th read_99th rx_desc rx_bytes tx_desc tx_bytes instructions cycles ref_cycles llc_miss c1 c1e c3 c6 c7 num_interrupts  
+	df_state = df.set_index(['itr', 'dvfs', 'target_qps']).drop(reward_cols, axis=1).drop(skip_cols, axis = 1)
+	df_reward = df.set_index(['itr', 'dvfs', 'target_qps'])[reward_cols]
+	state_dict = df_state.T.to_dict()
+	# NOTE: need to do this transform for rllib to not complain
+	for key in state_dict:
+		state_dict[key] = np.array(list(state_dict[key].values()))
+	reward_dict = df_reward.T.to_dict()
+	action_dict, knob_list = prepare_action_dicts(df)
+	key_list = list(state_dict.keys())
+
+	if debug:
+		print(Fore.BLACK + Back.GREEN + "state_dict: " + Style.RESET_ALL)
+		print(df_state)
+		print(Fore.BLACK + Back.GREEN + "reward_dict: " + Style.RESET_ALL)
+		print(df_reward)
+		print(Fore.BLACK + Back.GREEN + "action_dict: " + Style.RESET_ALL)
+		print(action_dict)
+		print(Fore.BLACK + Back.GREEN + "knob_list: " + Style.RESET_ALL)
+		print(knob_list)
+		print(Fore.BLACK + Back.GREEN + "key_list: " + Style.RESET_ALL)
+		print(key_list)
+
+	return state_dict, reward_dict, action_dict, knob_list, key_list
+
+
+
 def init_linux_mcd_dataset(df):
 	reward_cols = ['joules_99', 'joules_per_interrupt', 'time_per_interrupt']
 	skip_cols = ['fname', 'sys', 'core', 'exp', 'rapl']

@@ -1,0 +1,30 @@
+import plotly.express as px
+
+fig = px.scatter(df, x="itr", y="dvfs")
+
+samples = df.loc[df.itr ==env.goal_key[0]].loc[df.dvfs ==  env.goal_key[1]]
+
+fig.add_traces(px.scatter(samples, x="itr", y="dvfs").update_traces(marker_size=20, marker_color = "yellow").data)
+
+----------------
+import plotly.graph_objects as go
+
+fig = go.Figure()
+
+fig.add_trace(go.Scatter(x=itrs, y=dvfss, mode='markers'))
+
+x_lines = [10, 20]
+y_lines = [3328, 3840]
+
+fig.add_trace(go.Scatter(x=x_lines, y=y_lines, mode='lines'))
+# the above draws a line between (10, 3328) and (20, 3840)
+
+fig.add_trace(go.Scatter(x=x_lines, y=y_lines, marker= dict(size=10,symbol= "arrow-bar-up", angleref="previous")))
+# draw an arrow line between (10, 3328) and (20, 3840)
+
+
+
+
+
+
+

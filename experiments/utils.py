@@ -169,28 +169,55 @@ def missing_rdtsc_out_files(loc, debug=False):
 def init_dataset(df):
 	warnings.filterwarnings('ignore')
 
-	reward_cols = ['joules_99', 'joules_per_interrupt', 'time_per_interrupt']
+
+	#df = df[0:200]
+
+	reward_cols = ['joules_99']		#'joules_per_interrupt', 'time_per_interrupt',
+	#reward_cols = ['joules_per_interrupt']
 	# a featurized vector is identified by its run id (i.e. run#_core#) and qps id
-	id_cols = ['i']
+	#id_cols = ['i']
+	id_cols = ['core', 'sys', 'exp']
 	# a featurized vector is marked by its itr and dvfs settings
 	knob_cols = ['itr', 'dvfs']
 	# NOTE: ignoring qps value for now since it is constant
-	skip_cols = ['qps']
+	#skip_cols = ['qps']
+	skip_cols = ['fname']
 
-	#df_state = df.set_index(['i', 'itr', 'dvfs', 'qps']).drop(reward_cols, axis=1)
 	df_state = df.set_index(knob_cols).drop(reward_cols, axis=1).drop(skip_cols, axis=1)
-	#df_reward = df.set_index(['i', 'itr', 'dvfs', 'qps'])[reward_cols]
-	df_reward = df.set_index(knob_cols).drop(skip_cols, axis=1)[reward_cols]
+	df_reward = df.set_index(knob_cols)[reward_cols]
 
 	print("df_state:")
 	print(df_state)
 
+	# normalize
+	#for col in df_state.drop(id_cols, axis=1).columns:
+	#	# sanity check
+	#	if (df[col].max() - df[col].min() == 0):
+	#		continue
+	#	df[col] = (df[col] - df[col].min()) / (df[col].max() - df[col].min())
+	#for col in df_reward.columns:
+	#	# sanity check
+	#	if (df[col].max() - df[col].min() == 0):
+	#		continue
+	#	df[col] = (df[col] - df[col].min()) / (df[col].max() - df[col].min())
+
 	key_list = list(df_state.index)
 	key_set = set(key_list)
+
+	#bad_keys = []
+	#for key in key_set:
+	#	if list(key)[0] == 1:
+	#		bad_keys.append(key)
+	#	if list(key)[1] == '0xffff':
+	#		bad_keys.append(key)
+	#bad_keys = set(bad_keys)
+	#for key in bad_keys:
+	#	key_set.remove(key)
+
 	state_dict = {}
 	reward_dict = {}
 	for key in key_set:
-		states_per_key = df_state.loc[key].drop('i', axis=1)
+		states_per_key = df_state.loc[key].drop(id_cols, axis=1)
 		rewards_per_key = df_reward.loc[key]
 		num_reps = len(states_per_key)
 		avg_state_per_key = np.add.reduce(states_per_key.values)/num_reps
@@ -309,7 +336,16 @@ def prepare_action_dicts(df, key_set):
 		l_m1[0] = -1 #invalid choice
 		d = {}
 		for idx, elem in enumerate(l):
-			d[elem] = {-1: l_m1[idx], 0: elem, 1: l_p1[idx]}
+
+			pre = l_m1[idx]
+			suc = l_p1[idx]
+			if pre == 1:
+				pre = -1
+			if suc == '0xffff':
+				suc = -1
+			d[elem] = {-1: pre, 0: elem, 1: suc}
+
+			#d[elem] = {-1: l_m1[idx], 0: elem, 1: l_p1[idx]}
 		return d
 
 	d = {}
