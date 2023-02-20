@@ -1,105 +1,25 @@
 # CONTROLLER V0
 # dataset: linux mcd logs, 1 qps, varying itr-delay and dvfs
 import gym
-from ray.rllib.algorithms.ppo import PPO
+#from ray.rllib.algorithms.ppo import PPO
 
 import plotly.graph_objects as go
 
-import pandas as pd
+#import pandas as pd
 import numpy as np
+import itertools
+
 import utils
 
 # color print
 from colorama import Fore, Back, Style
-import sys
+#import sys
 
 # visualization plots
 import plotly.graph_objects as go
 
 
 debug = True
-
-
-
-def init_dataset(df):
-
-	energy_cols = ['joules_99']
-	id_cols = ['core', 'sys', 'exp']
-	knob_cols = ['itr', 'dvfs']
-	skip_cols = ['fname']
-	reward_cols = ['core', 'sys', 'exp', 'joules_99']
-	
-	for col in df.drop(['fname', 'sys' , 'core', 'exp', 'itr', 'dvfs'], axis = 1).columns:
-		# sanity check
-		if (df[col].max() - df[col].min() == 0):
-			continue
-		df[col] = (df[col] - df[col].min()) / (df[col].max() - df[col].min())
-
-	df_state = df.set_index(knob_cols).drop(energy_cols, axis=1).drop(skip_cols, axis=1)
-	df_reward = df.set_index(knob_cols)[reward_cols]
-
-	df_state = df_state.sort_index()
-	df_reward = df_reward.sort_index()
-
-	key_list = list(df_state.index)
-	key_set = set(key_list)
-	if debug:
-		print(Fore.BLACK + Back.GREEN + "|key_list| = " + str(len(key_list)) + "    key_list = ..." + Style.RESET_ALL)
-		print(Fore.BLACK + Back.BLUE + "|key_set| = " + str(len(key_set)) + "    key_set = " + Style.RESET_ALL)
-		print(key_set)
-
-	state_dict = {}
-	reward_dict = {}
-	for key in key_set:
-		states_per_key = df_state.loc[key].drop(id_cols, axis=1)
-		rewards_per_key = df_reward.loc[key].drop(id_cols, axis=1)
-		# each key should be paired with 16 execution states, one from each core
-		num_reps = len(states_per_key)
-		avg_state_per_key = np.add.reduce(states_per_key.values)/num_reps
-		avg_reward_per_key = np.add.reduce(rewards_per_key.values)/num_reps
-		state_dict[key] = np.array(list(avg_state_per_key))
-		reward_dict[key] = np.array(list(avg_reward_per_key))
-
-	action_dict, knob_list = prepare_action_dicts(df)
-
-	if debug:
-		print(Fore.BLACK + Back.GREEN + "|state_dict| = " + str(len(state_dict.items())) + "    state_dict[key_0]: " + Style.RESET_ALL)
-		print(list(state_dict.items())[0:1])
-		print(Fore.BLACK + Back.GREEN + "|reward_dict| = " + str(len(reward_dict.items())) + "    reward_dict[key_0]: " + Style.RESET_ALL)
-		print(list(reward_dict.items())[0:1])
-		print(Fore.BLACK + Back.GREEN + "knob_list: " + Style.RESET_ALL)
-		print(knob_list)
-		print(Fore.BLACK + Back.GREEN + "action_dict: " + Style.RESET_ALL)
-		print(action_dict)
-
-	return state_dict, reward_dict, action_dict, knob_list, key_set
-
-
-
-def prepare_action_dicts(df):
-	def get_knob_dict(knob):
-		l = np.sort(df[knob].unique())
-		l_p1 = np.roll(l, shift=-1)
-		l_p1[-1] = -1 #invalid choice
-		l_m1 = np.roll(l, shift=1)
-		l_m1[0] = -1 #invalid choice
-		d = {}
-		for idx, elem in enumerate(l):
-
-			pre = l_m1[idx]
-			suc = l_p1[idx]
-			d[elem] = {-1: pre, 0: elem, 1: suc}
-		return d
-
-	d = {}
-	knob_list = []
-	for knob in ['itr', 'dvfs']:
-		knob_list.append(knob)
-		d[knob] = get_knob_dict(knob)	
-
-	return d, knob_list
-
-
 
 
 
@@ -115,7 +35,11 @@ class EnergyCorridor(gym.Env):
 		self.reset_count = config["reset_count"]
 		self.success_count = config["success_count"]
 
-		self.state_space, self.reward_space, action_dict, knob_list, key_set = init_dataset(df)	
+		
+
+		self.state_space, self.reward_space, action_dict, knob_list, key_set, self.qps = utils.init_dataset(df)	
+		key_set, self.state_space, self.reward_space = utils.assert_keys(key_set, self.state_space, self.reward_space, action_dict)
+
 		self.key_space = list(key_set)
 		self.itr_actions = action_dict['itr']
 		self.dvfs_actions = action_dict['dvfs']
@@ -135,11 +59,10 @@ class EnergyCorridor(gym.Env):
 		num_actions = [3, 3]
 		self.action_space = gym.spaces.MultiDiscrete(num_actions)
 
-		joules = list({k:v[0] for k,v in self.reward_space.items()}.values())
-		min_joules = min(joules)
-		self.goal_energy = min_joules
-		min_index = joules.index(min_joules)
-		self.goal_key = self.key_space[min_index]
+		joules = list(self.reward_space.values())
+		self.goal_energy = min(joules)[0]
+		min_index = joules.index(self.goal_energy)
+		self.goal_key = list(self.reward_space.keys())[min_index]
 
 		if self.training:
 			print(Fore.BLACK + Back.RED + "|state_space| =  " + str(len(self.state_space)) + "    state_space[key_0]: " + Style.RESET_ALL)
@@ -162,23 +85,25 @@ class EnergyCorridor(gym.Env):
 		return
 
 
-	def reset(self, freq = 10):
+	def reset(self, freq = 20, start_key=None):
 
-		if (self.training and (self.reset_count % 10 == 0)):
+		if (self.training and (self.reset_count % freq == 0)):
 			print(Fore.BLACK + Back.CYAN + "reset_count =  " + str(self.reset_count) + "    success_count = " + str(self.success_count) + Style.RESET_ALL)
 
 		self.episode_reward = 0
 		self.step_count = 0
 		self.reset_count += 1
 
-		idx = np.random.randint(len(self.key_space))
-		self.cur_key = self.key_space[idx]
-
 		if self.testing:
+			self.cur_key = start_key
 			self.itrs_visited = []
 			self.dvfss_visited = []
 			self.itrs_visited.append(list(self.cur_key)[0])
 			self.dvfss_visited.append(list(self.cur_key)[1])
+
+		else:
+			idx = np.random.randint(len(self.key_space))
+			self.cur_key = self.key_space[idx]
 
 		return self.state_space[self.cur_key]
 
@@ -208,15 +133,21 @@ class EnergyCorridor(gym.Env):
 		done = (new_energy == self.goal_energy)
 		reward = 0
 		if (diff_energy > 0):
-			reward += 10
+			reward += diff_energy	
 		else:
-			reward -= 50
+			reward += 5 * diff_energy
 		if done:
 			self.success_count += 1
 
-		if self.testing:
-			print(Fore.CYAN + Back.BLACK + "STEP:    action =  " + str(action - 1) + "    reward = " + str(reward) + "    done = " + str(done) + "    cur_key, new key, new_energy: " + Style.RESET_ALL)
-			print(self.cur_key, new_key, new_energy)
+		#if self.testing:
+			#if (done):
+			#	print(Fore.CYAN + Back.BLACK + "STEP:    action =  " + str(action - 1) + "    done = " + str(done) + "    new_energy: " + str(new_energy) + Style.RESET_ALL)
+			#k0_0 = str(self.cur_key[0])
+			#k0_1 = str(self.cur_key[1])
+			#k1_0 = str(new_key[0])
+			#k1_1 = str(new_key[1])
+			#print(Fore.CYAN + Back.BLACK + "STEP:    action =  " + str(action - 1) + "   ( " + k0_0 + ", " + k0_1 + " ) -->    ( " + k1_0 + ", " + k1_1 + " )" + "    reward = " + str(reward) + "    done = " + str(done) + "    new_energy: " + str(new_energy) + Style.RESET_ALL)
+			#print(Fore.CYAN + Back.BLACK + "STEP:    action =  " + str(action - 1) +  "    reward = " + str(reward) + "    done = " + str(done) + "    new_energy: " + str(new_energy) + Style.RESET_ALL)
 		
 		self.cur_key = new_key
 		new_state = self.state_space[new_key]
@@ -226,74 +157,103 @@ class EnergyCorridor(gym.Env):
 
 
 
-featurized_logs_file = sys.argv[1]
-df = pd.read_csv(featurized_logs_file, sep = ',')
-D = int(len(df)/3)
-df_train = df[0:2*D]
-df_test = df[2*D+1:]
-
-if debug:
-	print()
-	print()
-	print(Fore.BLACK + Back.GREEN + "df: " + Style.RESET_ALL)
-	print(df)
-	print()
-	print()
-
-
-algo = PPO(
-	config = {
-		"env": EnergyCorridor,
-		"env_config": {
-			"df": df_train,
-			"reset_count": 0,
-			"success_count": 0,
-			"step_count": 0,
-		},
-		"framework": 'torch',
-		"num_workers": 1,
-		"horizon": 12,
-		#"gamma": 0.9,
-		#"lr": 1e-4,
-	}
-)
-
-
-
-for i in range(20):
-	results = algo.train()
-	print(Fore.BLACK + Back.BLUE + f"Iter: {i}, episode_reward_mean = {results['episode_reward_mean']}" + Style.RESET_ALL)
-
-
-
-env = EnergyCorridor({"df": df_test, "step_count": 0, "reset_count": 0, "success_count": 0})
-env.training = False
-env.testing = True
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=env.itrs, y=env.dvfss, mode='markers'))
-all_itrs_visited = []
-all_dvfss_visited = []
-for i in range(50):
-	print("resetting env...")
-	print()
-	obs = env.reset()
-	done = False
-	for i in range(15):
-		action = algo.compute_single_action(obs)
-		obs, reward, done, info = env.step(action)
-
-		if done:
-			break
-	print("itrs_visited: ", env.itrs_visited, "   dvfss_visited: ", env.dvfss_visited)
-	all_itrs_visited.append(env.itrs_visited)
-	all_dvfss_visited.append(env.dvfss_visited)
+#featurized_logs_file = sys.argv[1]
+#featurized_logs_test_file = sys.argv[2]
+#df = pd.read_csv(featurized_logs_file, sep = ',')
+#df_test = pd.read_csv(featurized_logs_test_file, sep = ',')
+#
+#if debug:
+#	print()
+#	print()
+#	print(Fore.BLACK + Back.GREEN + "df: " + Style.RESET_ALL)
+#	print(df)
+#	print()
+#	print()
+#	print(Fore.BLACK + Back.GREEN + "df_test: " + Style.RESET_ALL)
+#	print(df_test)
+#	print()
+#	print()
+#
+#
+#algo = PPO(
+#	config = {
+#		"env": EnergyCorridor,
+#		"env_config": {
+#			"df": df,
+#			"reset_count": 0,
+#			"success_count": 0,
+#			"step_count": 0,
+#		},
+#		"framework": 'torch',
+#		"num_workers": 1,
+#		"horizon": 20,
+#		"seed": 4,
+#		"gamma": 0.5,
+##		"lr": 1e-6,
+#	}
+#)
+#
+## test seed
+## [np.random.random() for i in range(10)]
+#def fix_seeds(seed=0):
+#	pass
+##	np.random.seed(seed)
+##	torch.manual_seed(seed)
+##	torch.use_deterministic_algorithms(True)
+#
+#for i in range(25):
+#	results = algo.train()
+#	print(Fore.BLACK + Back.BLUE + f"Iter: {i}, episode_reward_mean = {results['episode_reward_mean']}" + Style.RESET_ALL)
+#
+#checkpoint_file = algo.save("trained_models/RL_model_0_gamma_9")
 
 
 
-fig.add_trace(go.Scatter(x=[list(env.goal_key)[0]], y=[list(env.goal_key)[1]], marker_size=20, marker_color = "yellow"))	
-for i in range(50):
-	fig.add_trace(go.Scatter(x=all_itrs_visited[i], y=all_dvfss_visited[i], marker= dict(size=10,symbol= "arrow-bar-up", angleref="previous")))
 
-fig.show()
+########################################################################################
+
+#env = EnergyCorridor({"df": df_test, "step_count": 0, "reset_count": 0, "success_count": 0})
+#
+#env.training = False
+#env.testing = True
+#
+#fig = go.Figure()
+#plot_dvfss = []
+#plot_itrs = []
+#plot_rewards = []
+#for (i, d) in zip(env.itrs, env.dvfss):
+#	if d < 10000:
+#		plot_dvfss.append(d)
+#		plot_itrs.append(i)
+#		plot_rewards.append(env.reward_space[(i,d)])
+#fig.add_trace(go.Scatter(x=plot_itrs, y=plot_dvfss, text=plot_rewards, mode='markers'))
+#fig.add_trace(go.Scatter(x=[list(env.goal_key)[0]], y=[list(env.goal_key)[1]], marker_size=20, marker_color = "yellow"))	
+#fig.update_layout(title="QPS: " + str(env.qps) + " - Gamma: " + str(algo.config['gamma']) + " - lr: " + str(algo.config['lr']))
+#
+#for key in env.key_space:
+#	obs = env.reset(start_key = key)
+#	done = False
+#	for i in range(20):
+#		action = algo.compute_single_action(obs)
+#		obs, reward, done, info = env.step(action)
+#
+#		if done:
+#			break
+#
+#	trace_name = str(key[0]) + " , " + str(key[1])
+#	if key[1] < 10000:
+#		if not done:
+#			fig.add_trace(go.Scatter(x=env.itrs_visited, y=env.dvfss_visited, name=trace_name, marker= dict(size=10,symbol= "arrow-bar-up", angleref="previous")))
+#			print()
+#			print("NOT DONE")
+#			print()
+#		else:
+#			fig.add_trace(go.Scatter(x=env.itrs_visited, y=env.dvfss_visited, name=trace_name, marker= dict(size=10,symbol= "arrow-bar-up", angleref="previous"), marker_color="black"))
+#	print("itrs_visited: ", env.itrs_visited)
+#	print("dvfss_visited: ", env.dvfss_visited)
+#
+#
+#
+#fig.show()
 
 
